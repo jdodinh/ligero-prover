@@ -1370,6 +1370,9 @@ struct nonbatch_verifier_context
     buffer_t linear()    { return linear_; }
     buffer_t quadratic() { return quad_;   }
 
+    /// Get the raw sampled column values from the proof
+    const std::vector<uint32_t>& host_samplings() const { return host_samplings_; }
+
 protected:
     size_t pop_offset_;
     std::vector<size_t> sample_index_;
