@@ -54,3 +54,7 @@ path = "examples/eddsa/eddsa_verify_no_args.rs"
 [[example]]
 name = "eddsa_batch"
 path = "examples/eddsa/eddsa_batch_verify_no_args.rs"
+
+[[example]]
+name = "mdl_verification"
+path = "examples/mdl_verification/mdl_verification.rs"

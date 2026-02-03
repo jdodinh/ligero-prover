@@ -68,6 +68,10 @@ int main(int argc, const char *argv[]) {
     std::string shader_path;
     std::string proof_name = "proof_data.gz";
 
+    if (argc >= 3) {
+        proof_name = argv[2];
+    }
+
     if (argc < 2) {
         std::cerr << "Error: No JSON input provided" << std::endl;
         exit(EXIT_FAILURE);
@@ -311,7 +315,8 @@ int main(int argc, const char *argv[]) {
 
     vt.stop();
 
-    auto vs1_root = zkp::merkle_tree<params::hasher>::recommit(vctx->flush_digests(), decommit);
+    auto leaf_digests = vctx->flush_digests();
+    auto vs1_root = zkp::merkle_tree<params::hasher>::recommit(leaf_digests, decommit);
 
     // ------------------------------------------------------------
     
@@ -438,6 +443,109 @@ int main(int argc, const char *argv[]) {
               << "-----------------------------------------" << std::endl
               << "Final Verify Result:                 " << verify_result << std::endl;
     
+    // Dump golden file if requested (for Rust verifier testing)
+    if (jconfig.contains("dump-golden")) {
+        std::string golden_path = jconfig["dump-golden"].template get<std::string>();
+
+        json golden;
+        golden["proof_file"] = proof_name;
+        golden["config"]["packing"] = l;
+        golden["config"]["n"] = n;
+        golden["config"]["k"] = k;
+        golden["config"]["sample_size"] = params::sample_size;
+
+        // Intermediate values (hex encoded)
+        golden["intermediate_values"]["stage1_root"] = boost::algorithm::hex(
+            std::string(stage1_root.begin(), stage1_root.end()));
+        golden["intermediate_values"]["sample_seed"] = boost::algorithm::hex(
+            std::string(sample_seed.begin(), sample_seed.end()));
+        golden["intermediate_values"]["sample_indices"] = sample_index;
+        golden["intermediate_values"]["vs1_root"] = boost::algorithm::hex(
+            std::string(vs1_root.begin(), vs1_root.end()));
+
+        // Leaf digests (hex encoded, one per sampled column)
+        std::vector<std::string> leaf_digests_hex;
+        for (const auto& digest : leaf_digests) {
+            leaf_digests_hex.push_back(boost::algorithm::hex(
+                std::string(reinterpret_cast<const char*>(digest.data), 32)));
+        }
+        golden["intermediate_values"]["leaf_digests"] = leaf_digests_hex;
+
+        // Decoded polynomial evaluations (for NTT comparison)
+        // NOTE: These are AFTER the full decode pipeline (INTT(n) → fold → NTT(k))
+        // First 10 decoded evaluations of code polynomial (hex, big-endian)
+        std::vector<std::string> decoded_code_first_10;
+        for (size_t i = 0; i < std::min(size_t(10), prover_code.size()); i++) {
+            decoded_code_first_10.push_back(prover_code[i].get_str(16));
+        }
+        golden["intermediate_values"]["decoded_code_first_10"] = decoded_code_first_10;
+
+        // Also dump raw encoded values (before decode) for simple INTT comparison
+        // First 10 encoded code values
+        std::vector<std::string> encoded_code_first_10;
+        for (size_t i = 0; i < std::min(size_t(10), prover_encoded_codes.size()); i++) {
+            encoded_code_first_10.push_back(prover_encoded_codes[i].get_str(16));
+        }
+        golden["intermediate_values"]["encoded_code_first_10"] = encoded_code_first_10;
+
+        // Decoded values around k boundary (k-5 to k+5) to verify degree check
+        std::vector<std::string> decoded_code_around_k;
+        for (size_t i = (k > 5 ? k - 5 : 0); i < std::min(k + 5, prover_code.size()); i++) {
+            decoded_code_around_k.push_back(prover_code[i].get_str(16));
+        }
+        golden["intermediate_values"]["decoded_code_around_k"] = decoded_code_around_k;
+        golden["intermediate_values"]["decoded_code_around_k_start_idx"] = (k > 5 ? k - 5 : 0);
+
+        // First 10 decoded quad evaluations (should all be 0 for valid proof)
+        std::vector<std::string> decoded_quad_first_10;
+        for (size_t i = 0; i < std::min(size_t(10), prover_quad.size()); i++) {
+            decoded_quad_first_10.push_back(prover_quad[i].get_str(16));
+        }
+        golden["intermediate_values"]["decoded_quad_first_10"] = decoded_quad_first_10;
+
+        // =======================================================================
+        // Extended NTT Pipeline Data (for isolated Rust testing)
+        // =======================================================================
+
+        // All encoded code values (input to decode pipeline)
+        std::vector<std::string> encoded_code_all;
+        for (size_t i = 0; i < prover_encoded_codes.size(); i++) {
+            encoded_code_all.push_back(prover_encoded_codes[i].get_str(16));
+        }
+        golden["ntt_pipeline"]["encoded_code_all"] = encoded_code_all;
+
+        // All decoded code values (output from decode pipeline)
+        std::vector<std::string> decoded_code_all;
+        for (size_t i = 0; i < prover_code.size(); i++) {
+            decoded_code_all.push_back(prover_code[i].get_str(16));
+        }
+        golden["ntt_pipeline"]["decoded_code_all"] = decoded_code_all;
+
+        // Parameters for the decode pipeline
+        golden["ntt_pipeline"]["n"] = n;
+        golden["ntt_pipeline"]["k"] = k;
+
+        // Host samplings (sampled column values from proof)
+        const auto& samplings = vctx->host_samplings();
+        golden["host_samplings"]["limbs"] = samplings;
+        golden["host_samplings"]["num_u32"] = samplings.size();
+        golden["host_samplings"]["num_field_elements"] = samplings.size() / 8;
+        golden["host_samplings"]["num_rows"] = (samplings.size() / 8) / params::sample_size;
+
+        // Verification results
+        golden["results"]["valid_merkle"] = valid_merkle;
+        golden["results"]["valid_code"] = valid_code;
+        golden["results"]["valid_linear"] = valid_linear;
+        golden["results"]["valid_quad"] = valid_quad;
+        golden["results"]["code_equal"] = code_equal;
+        golden["results"]["linear_equal"] = linear_equal;
+        golden["results"]["quad_equal"] = quad_equal;
+        golden["results"]["final_result"] = verify_result;
+
+        std::ofstream(golden_path) << golden.dump(2);
+        std::cout << "Golden file written to: " << golden_path << std::endl;
+    }
+
     show_timer();
 
 #if defined(__EMSCRIPTEN__)
@@ -446,6 +554,6 @@ int main(int argc, const char *argv[]) {
     // therefore we need to do it manually.
     clear_timers();
 #endif
-    
+
     return !verify_result;
 }
