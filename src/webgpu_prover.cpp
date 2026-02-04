@@ -69,6 +69,10 @@ int main(int argc, const char *argv[]) {
     std::string shader_path;
     std::string proof_name = "proof_data.gz";
 
+    if (argc >= 3) {
+        proof_name = argv[2];
+    }
+
     if (argc < 2) {
         std::cerr << "Error: No JSON input provided" << std::endl;
         exit(EXIT_FAILURE);
