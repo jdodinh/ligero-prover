@@ -10,3 +10,4 @@ sdk/rust/target/
 Cargo.lock
 .clangd
 **/.vscode
+.cache

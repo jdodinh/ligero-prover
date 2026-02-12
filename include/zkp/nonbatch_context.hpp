@@ -1059,6 +1059,7 @@ struct nonbatch_stage3_context
 
         sync_sample_to_host();
         oa_ << host_samplings_;
+        oa_ << this->backend().manager().row_types();
     }
 
 protected:
@@ -1114,6 +1115,7 @@ struct nonbatch_verifier_context
             exe.sampling_init(si);
 
             ia_ >> host_samplings_;
+            ia_ >> row_types_;
 
             limbs_.resize(2 * this->executor().padding_size() * field_type::num_u64_limbs);
 
@@ -1377,6 +1379,7 @@ protected:
     size_t pop_offset_;
     std::vector<size_t> sample_index_;
     std::vector<uint32_t> host_samplings_;
+    std::vector<uint8_t> row_types_;
     std::vector<uint64_t> limbs_;
 
     InputArchive& ia_;

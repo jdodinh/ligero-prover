@@ -60,6 +60,8 @@ struct witness_manager {
     mpz_random_engine& linear_random_engine()    { return linear_random_engine_;    }
     mpz_random_engine& quadratic_random_engine() { return quadratic_random_engine_; }
 
+    const std::vector<uint8_t>& row_types() const { return row_types_; }
+
     template <typename Func>
     witness_manager& register_linear_callback(Func&& func) {
         linear_callback_ = std::forward<Func>(func);
@@ -219,6 +221,7 @@ struct witness_manager {
             // }
             // std::cout << std::endl;
 
+            row_types_.push_back(0);  // Track linear row (type 0)
             linear_callback_(witness_row_type{linear_val_, linear_random_});
 
             linear_val_.clear();
@@ -253,6 +256,11 @@ struct witness_manager {
                 // }
                 // std::cout << std::endl;
             }
+
+            // Track 3 quadratic rows (type 1 each for x, y, z wires)
+            row_types_.push_back(1);
+            row_types_.push_back(1);
+            row_types_.push_back(1);
 
             quadratic_callback_(witness_row_type{quadratic_val_[0], quadratic_random_[0]},
                                 witness_row_type{quadratic_val_[1], quadratic_random_[1]},
@@ -312,6 +320,11 @@ struct witness_manager {
             pad_encoding_random(quadratic_val_[2], 1);
         }
         pad_encoding_random(quadratic_val_[2], 2 * (padded_row_size_ - row_size_));
+
+        // Track 3 mask rows (type 2 each for code, linear, quad masks)
+        row_types_.push_back(2);
+        row_types_.push_back(2);
+        row_types_.push_back(2);
 
         mask_callback_(quadratic_val_[0], quadratic_val_[1], quadratic_val_[2]);
 
@@ -524,6 +537,9 @@ private:
 
     size_t linear_counter_    = 0;
     size_t quadratic_counter_ = 0;
+
+    /// Row type annotations for verifier: 0=linear, 1=quadratic, 2=mask
+    std::vector<uint8_t> row_types_;
 
     std::function<void(witness_row_type)> linear_callback_;
     std::function<void(witness_row_type, witness_row_type, witness_row_type)> quadratic_callback_;
