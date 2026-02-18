@@ -60,6 +60,8 @@ struct witness_manager {
     mpz_random_engine& linear_random_engine()    { return linear_random_engine_;    }
     mpz_random_engine& quadratic_random_engine() { return quadratic_random_engine_; }
 
+    /// Per data-row annotation: 0 = linear, 1 = quadratic.
+    /// Does not include the 3 mask rows (which are always last).
     const std::vector<uint8_t>& row_types() const { return row_types_; }
 
     template <typename Func>
@@ -321,10 +323,8 @@ struct witness_manager {
         }
         pad_encoding_random(quadratic_val_[2], 2 * (padded_row_size_ - row_size_));
 
-        // Track 3 mask rows (type 2 each for code, linear, quad masks)
-        row_types_.push_back(2);
-        row_types_.push_back(2);
-        row_types_.push_back(2);
+        // Mask rows are structurally implicit (always the last 3 rows),
+        // so they are not tracked in row_types_.
 
         mask_callback_(quadratic_val_[0], quadratic_val_[1], quadratic_val_[2]);
 
@@ -538,7 +538,8 @@ private:
     size_t linear_counter_    = 0;
     size_t quadratic_counter_ = 0;
 
-    /// Row type annotations for verifier: 0=linear, 1=quadratic, 2=mask
+    /// Per data-row type annotations for verifier: 0=linear, 1=quadratic.
+    /// Excludes the 3 mask rows (which are always appended last).
     std::vector<uint8_t> row_types_;
 
     std::function<void(witness_row_type)> linear_callback_;
